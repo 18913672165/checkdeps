@@ -1,9 +1,11 @@
 tool for check dependencies for go project
 
-#Setup
-you must first install the graphviz before using this tool
+#Install
+1.install the graphviz before using this tool
+2.go get github.com/18913672165/checkdeps
 
 #Usage
+checkdeps github.com/18913672165/checkdeps
 
 
 
