@@ -36,7 +36,7 @@ func init() {
 	}
 }
 
-func getDeps(respType string) (fileName string) {
+func getDeps(respType string, filePath string, name string) error {
 	for k, v := range pkgs {
 		tmp := strings.Split(k, "/vendor/")
 		newk := ""
@@ -90,9 +90,13 @@ func getDeps(respType string) (fileName string) {
 		depReal[k] = ret
 	}
 	sort.Strings(pkgKeys)
+	var fileName string = path.Join(filePath, name) + "." + respType
 	if respType == "csv" {
-		fileName = path.Join(*staticDir, "out.cv")
-		file, _ := os.Create(fileName)
+
+		file, err := os.Create(fileName)
+		if err != nil {
+			return err
+		}
 		defer file.Close()
 		tmplist := [][]string{}
 		for k, v := range depReal {
@@ -115,10 +119,13 @@ func getDeps(respType string) (fileName string) {
 
 		file.Sync()
 		file.Close()
-		return
+		return nil
 	}
-	fileTmp := path.Join(*staticDir, "out.tmp")
-	file, _ := os.Create(fileTmp)
+	fileTmp := path.Join(filePath, name) + "." + "tmp"
+	file, err := os.Create(fileTmp)
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 	file.WriteString(fmt.Sprint("digraph godep {\n"))
 	for _, pkgName := range pkgKeys {
@@ -141,13 +148,16 @@ func getDeps(respType string) (fileName string) {
 
 	}
 	file.WriteString(fmt.Sprint("}\n"))
-	fileName = path.Join(*staticDir, "out.png")
+	fileName = path.Join(filePath, name) + "." + respType
 	fileReal, _ := os.Create(fileName)
 	defer fileReal.Close()
 	cmd := exec.Command("dot", "-Tpng", fileTmp)
-	val, _ := cmd.Output()
+	val, err := cmd.Output()
+	if err != nil {
+		return err
+	}
 	fileReal.Write(val)
-	return
+	return nil
 
 }
 

@@ -1,79 +1,67 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"path"
+	"strings"
 )
 
 var (
-	host      = flag.String("host", "", "主机名")
-	port      = flag.Int("port", 12346, "端口")
-	staticDir = flag.String("staticDir", os.Getenv("HOME"), "静态文件存放路径")
+	from = flag.String("f", "", "分析的模块名")
+	to   = flag.String("o", "", "输出路径")
 )
 
-type errMsg struct {
-	Reason string
-}
-
-func checkdeps(w http.ResponseWriter, req *http.Request) {
-	//从query获取模块名
-	pkg := req.URL.Query().Get("pkg")
-	//检查query是否为空
-	if pkg == "" {
-		reason := "query pkg can't be null"
-		resp, _ := json.Marshal(&errMsg{Reason: reason})
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		w.Write(resp)
-		return
-	}
-	//检查pkg是否有效
-	root := path.Join(baseDir, "src", pkg)
-	if err := os.Chdir(root); err != nil {
-		reason := "query pkg is an not path"
-		resp, _ := json.Marshal(&errMsg{Reason: reason})
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		w.Write(resp)
-		return
-	}
-	_, err := buildContext.Import(pkg, root, 0)
-	if err != nil {
-		reason := fmt.Sprintf("failed to find package %s", pkg)
-		resp, _ := json.Marshal(&errMsg{Reason: reason})
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		w.Write(resp)
-		return
-	}
-	//获取客户端所需类型,支持img和csv,默认是img
-	respType := req.URL.Query().Get("type")
-	if respType != "img" && respType != "csv" {
-		respType = "img"
-	}
-	//这边可以检查是否已经生成过
-	processPackage(root, pkg)
-	filename := getDeps(respType)
-	f, _ := os.Open(filename)
-	defer f.Close()
-	if respType == "csv" {
-		w.Header().Set("Content-Type", "text/csv")
-	} else {
-		w.Header().Set("Content-Type", "image/png")
-	}
-	content, _ := ioutil.ReadAll(f)
-	w.Write(content)
-}
-
 func main() {
-	http.HandleFunc("/checkdeps", checkdeps)
-	http.HandleFunc("/cc", test)
-	log.Printf("服务器启动,在%s:%d", *host, *port)
-	http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), nil)
+	var fromPath string = *from
+	if fromPath == "" {
+		tmpFrom, err := os.Getwd()
+		if err != nil {
+			log.Fatal("未指定模块路径且获取当前路径失败")
+		}
+		log.Println("未指定模块路径,使用当前路径")
+		tmpPath := strings.Split(tmpFrom, path.Join(baseDir, "src")+"/")
+		if len(tmpPath) == 1 || tmpPath[1] == tmpFrom {
+			log.Fatal("错误的模块路径")
+		}
+		fromPath = tmpPath[1]
+	}
+	root := path.Join(baseDir, "src", fromPath)
+	if err := os.Chdir(root); err != nil {
+		log.Fatal("错误的路径名")
+	}
+	if _, err := buildContext.Import(fromPath, root, 0); err != nil {
+		log.Fatalf("无效的模块路径:%s", fromPath)
+	}
+	var dir string
+	var base string
+	dir, base = path.Split(*to)
+	var filePath string
+	var err error
+	if dir == "" && base == "" {
+		filePath, err = os.Getwd()
+		dir, base = path.Split(filePath)
+	}
+
+	var respType string
+	respType = path.Ext(base)
+	if respType == "" {
+		respType = "png"
+	} else {
+		respType = respType[1:]
+	}
+	if respType != "png" && respType != "csv" {
+		log.Fatal("暂不支持的输出格式")
+	}
+	filename := filePath + "." + respType
+	err = processPackage(root, fromPath)
+	if err != nil {
+		log.Fatalf("error:%v", err)
+	}
+	err = getDeps(respType, filePath, base)
+	if err != nil {
+		log.Fatalf("error:%v", err)
+	}
+	log.Printf("检查成功,可查看文件:%s", filename)
 }
