@@ -1,1 +1,1 @@
-tool for check dependencies for go project
+检查go项目的依赖关系(依赖数目或者依赖关系图)
